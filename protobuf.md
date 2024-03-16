@@ -95,4 +95,3 @@ package tutorial;
 In this example, the generated Go code will be part of the `github.com/yourusername/yourrepo` package.
 
 
-That's it for this section! In the next sections, we will dive deeper into each type of gRPC communication.

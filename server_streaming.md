@@ -1,10 +1,9 @@
-# Unary gRPC in Go
+# Server Streaming gRPC in Go
 
-Unary RPCs are the simplest type of RPC where the client sends a single request and gets a single response back. Here's how you can implement a unary gRPC service in Go:
-
+Server streaming RPCs are a type of RPC where the client sends a single request to the server and gets a stream of responses back. Here's how you can implement a server streaming gRPC service in Go:
 
 <div style="text-align:center">
-    <img src="./images/grpc-unary.png" alt="unary">
+    <img src="./images/server-stream.png" alt="server streaming">
 </div>
 
 ## Step 1: Define the Service
@@ -16,20 +15,20 @@ syntax = "proto3";
 
 package tutorial;
 
-message StringRequest {
-  string data = 1;
+message NumberRequest {
+  int32 max = 1;
 }
 
-message StringResponse {
-  string data = 1;
+message NumberResponse {
+  int32 num = 1;
 }
 
-service StringService {
-  rpc ToUpper (StringRequest) returns (StringResponse);
+service NumberService {
+  rpc ListNumbers (NumberRequest) returns (stream NumberResponse);
 }
 ```
 
-In this example, the `StringService` has a unary RPC method `ToUpper` that takes a `StringRequest` and returns a `StringResponse`.
+In this example, the `NumberService` has a server streaming RPC method `ListNumbers` that takes a `NumberRequest` and returns a stream of `NumberResponse` messages.
 
 ## Step 2: Generate Go Code
 
@@ -60,8 +59,13 @@ import (
 
 type server struct{}
 
-func (s *server) ToUpper(ctx context.Context, in *pb.StringRequest) (*pb.StringResponse, error) {
-  return &pb.StringResponse{Data: strings.ToUpper(in.Data)}, nil
+func (s *server) ListNumbers(req *pb.NumberRequest, stream pb.NumberService_ListNumbersServer) error {
+  for i := 1; i <= int(req.Max); i++ {
+    if err := stream.Send(&pb.NumberResponse{Num: int32(i)}); err != nil {
+      return err
+    }
+  }
+  return nil
 }
 
 func main() {
@@ -70,14 +74,14 @@ func main() {
     log.Fatalf("failed to listen: %v", err)
   }
   s := grpc.NewServer()
-  pb.RegisterStringServiceServer(s, &server{})
+  pb.RegisterNumberServiceServer(s, &server{})
   if err := s.Serve(lis); err != nil {
     log.Fatalf("failed to serve: %v", err)
   }
 }
 ```
 
-In this example, the `ToUpper` method converts the input string to upper case.
+In this example, the `ListNumbers` method sends a stream of numbers from 1 to the input number.
 
 ## Step 4: Implement the Client
 
@@ -103,17 +107,27 @@ func main() {
     log.Fatalf("did not connect: %v", err)
   }
   defer conn.Close()
-  c := pb.NewStringServiceClient(conn)
+  c := pb.NewNumberServiceClient(conn)
 
   ctx, cancel := context.WithTimeout(context.Background(), time.Second)
   defer cancel()
-  r, err := c.ToUpper(ctx, &pb.StringRequest{Data: "hello"})
+  stream, err := c.ListNumbers(ctx, &pb.NumberRequest{Max: 10})
   if err != nil {
-    log.Fatalf("could not greet: %v", err)
+    log.Fatalf("could not list numbers: %v", err)
   }
-  log.Printf("Greeting: %s", r.GetData())
+  for {
+    res, err := stream.Recv()
+    if err == io.EOF {
+      break
+    }
+    if err != nil {
+      log.Fatalf("could not receive: %v", err)
+    }
+    log.Printf("Number: %d", res.GetNum())
+  }
 }
 ```
 
-In this example, the client sends a "hello" string to the server and prints the response.
+In this example, the client requests a stream of numbers up to 10 and prints each number.
+
 
